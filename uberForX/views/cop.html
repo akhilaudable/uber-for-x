@@ -3,15 +3,109 @@
 <head>
     <meta charset="utf-8"/>
     <title>Cop <%= userId %> </title>
+    <link href='https://api.mapbox.com/mapbox.js/v2.4.0/mapbox.css' rel='stylesheet' />
 </head>
 <body data-userId="<%= userId %>">
     <h1>Hello Cop <%= userId %></h1>
     <h4 id="notification">
         <!-- Some info will be displayed here-->
     </h4>
-    <div id="map">
+    <button onclick="helpCitizen()">
+      Help Citizen
+    </button>
+    <div id="copDetails"> </div>
+    <div id="map"  style='width: 1000px; height: 1000px;'>
         <!-- We will load a map here later-->
     </div>
-    <!--Load JavaScripts -->
+
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+        <script src='https://api.mapbox.com/mapbox.js/v2.4.0/mapbox.js'></script>
+    <script type="text/javascript">
+
+      console.log("a");
+      var socket = io();
+      //Fetch userId from the data-atribute of the body tag
+      var userId = document.body.getAttribute("data-userId");
+      /*Fire a 'join' event and send your userId to the server, to join a room - room-name will be the userId itself!
+  */
+
+    socket.emit('join', {userId: userId});
+  //Declare variables, this will be used later
+      var requestDetails = {};
+      var copDetails = {};
+      var map, marker;
+
+      //First send a GET request using JQuery AJAX and get the cop's details and save it
+        $.ajax({
+            url: "/cops/info?userId="+userId,
+            type: "GET",
+            dataType: "json",
+            success: function(data){ //Once response is successful
+                copDetails = data.copDetails; //Save the cop details
+                console.log("b");
+                copDetails.location = {
+                    address: copDetails.location.address,
+                    longitude: copDetails.location.coordinates[0],
+                    latitude: copDetails.location.coordinates[1]
+                }
+                document.getElementById("copDetails").innerHTML = JSON.stringify(data.copDetails);
+                L.mapbox.accessToken = 'pk.eyJ1IjoiYWtoaWxhdWRhYmxlIiwiYSI6ImNqOWtiZDU3bjQ0NGIzM21xZHBham1pb2IifQ.iRho-4dtw9X2_U54tsuktQ';
+                //Load the map and give it a default style
+                map = L.mapbox.map("map", "mapbox.streets");
+                //set it to a cop's lat-lng and zoom level
+               map.setView([copDetails.location.latitude, copDetails.location.longitude], 15);
+                //Display a default marker
+                marker = L.marker([copDetails.location.latitude, copDetails.location.longitude]).addTo(map);
+                //This will display an input box
+                map.addControl(L.mapbox.geocoderControl("mapbox.places", {
+                    autocomplete: true, //will suggest for places as you type
+                }).on("select", function(data){
+                    //This function runs when a place is selected
+
+
+                //data contains the geocoding results
+                console.log(data);
+                //Do something with the results
+                //Set the marker to new location
+                marker.setLatLng([
+                    data.feature.center[1],
+                    data.feature.center[0]
+                ]);
+            }));
+            },
+            error: function(httpRequest, status, error){
+                console.log(error);
+            }
+        });
+
+              //Listen for a "request-for-help" event
+              socket.on("request-for-help", function(eventData){
+                  //Once request is received, do this:
+                  //Save request details
+                  requestDetails = eventData; //Contains info of citizen
+                  //display the data received from the event
+                  document.getElementById("notification").innerHTML = "Someone's being attacked by a wildling! \n" + JSON.stringify(requestDetails);
+
+                  //Show citizen location on the map
+                  L.marker([requestDetails.location.latitude, requestDetails.location.longitude], {
+                      icon: L.icon({
+                          iconUrl: '/images/citizen.png',
+                          iconSize: [50, 50]
+                      })
+                  }).addTo(map);
+              });
+
+
+      function helpCitizen(){
+    //Fire a "request-accepted" event/signal and send relevant info back to server
+          socket.emit("request-accepted", {
+              requestDetails: requestDetails,
+              copDetails: copDetails
+          });
+       }
+  </script>
 </body>
 </html>
